@@ -4,7 +4,7 @@
 export const fetchLogs = async () => {
   try {
     // Make sure this matches your actual FastAPI endpoint for logs
-    const response = await fetch('https://phishguard-backend-yh0j.onrender.com'); 
+    const response = await fetch('https://phishguard-backend-yh0j.onrender.com/api/logs'); 
     
     if (!response.ok) {
       throw new Error('Network response was not ok');
