@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+httpx
+joblib
+pydantic
+python-whois
+dnspython
+scikit-learn
+xgboost
