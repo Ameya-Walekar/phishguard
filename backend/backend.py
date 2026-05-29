@@ -1,6 +1,7 @@
 #Importing Libraries
 
 import os
+import json
 import math
 import re
 import base64
@@ -164,17 +165,12 @@ app = FastAPI(
     title="PhishGuard", version="1.2.0", lifespan=lifespan
 )
 
-origins = [
-    "http://localhost:5173",
-    "https://project-ocltx.vercel.app"   # Your React Dashboard
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  # Allows all origins, necessary for Chrome Extensions
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows POST, GET, OPTIONS, etc.
-    allow_headers=["*"],  # Allows all headers
+    allow_origins=["*"],      # Allows Chrome extensions (null origin) + dashboard + localhost
+    allow_credentials=False,  # Must be False when allow_origins=["*"]
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 class URLScanRequest(BaseModel):
@@ -193,7 +189,21 @@ class URLScanResponse(BaseModel):
 
 # --- 5. COMPLETED HYBRID TRIAGE ROUTING PIPELINE ---
 
-db=[]
+# Persistent JSON log file — survives Render cold starts
+DB_FILE = Path(__file__).resolve().parent / "scan_logs.json"
+
+def load_db() -> list:
+    if DB_FILE.exists():
+        try:
+            with open(DB_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            return []
+    return []
+
+def save_db(db: list) -> None:
+    with open(DB_FILE, "w") as f:
+        json.dump(db, f)
 
 @app.post("/api/v1/scan", response_model=URLScanResponse)
 async def scan_url(payload: URLScanRequest) -> URLScanResponse:
@@ -222,19 +232,17 @@ async def scan_url(payload: URLScanRequest) -> URLScanResponse:
             f"URLhaus Blacklist Match ({urlhaus_res.get('threat_type')})"
         )
 
-    
-    global db
-    
-
     # CTI
     if cti_hits:
+        db = load_db()
         db.append({
-        "id": len(db) + 1,
-         "url": target_url,
-        "risk_score": round(1.0, 4),
-        "status": "Malicious",
-        "timestamp": datetime.utcnow().isoformat()
+            "id": len(db) + 1,
+            "url": target_url,
+            "risk_score": round(1.0, 4),
+            "status": "Malicious",
+            "timestamp": datetime.utcnow().isoformat()
         })
+        save_db(db)
         return URLScanResponse(
             url=target_url,
             is_phishing=True,
@@ -299,13 +307,15 @@ async def scan_url(payload: URLScanRequest) -> URLScanResponse:
                 detail=f"ML Framework Pipeline Execution Crash: {str(e)}",
             )
     print(f"🚨 3. Verdict {verdict}")
+    db = load_db()
     db.append({
-    "id": len(db) + 1,
-    "url": target_url,
-    "risk_score": round(confidence, 4),
-    "status": "Malicious" if is_phishing else "Safe",
-    "timestamp": datetime.utcnow().isoformat()
+        "id": len(db) + 1,
+        "url": target_url,
+        "risk_score": round(confidence, 4),
+        "status": "Malicious" if is_phishing else "Safe",
+        "timestamp": datetime.utcnow().isoformat()
     })
+    save_db(db)
     return URLScanResponse(
         url=target_url,
         is_phishing=is_phishing,
@@ -323,5 +333,5 @@ def health_check():
 
 @app.get("/api/logs")
 async def get_logs():
-    # Returns the list of all stored scan results as JSON
-    return db
+    # Returns all stored scan results from persistent JSON file
+    return load_db()
