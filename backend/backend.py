@@ -29,7 +29,6 @@ except ImportError:
 ml_model = None
 
 # CTI : Directly checking if a particular url is reported as phishing
-VIRUSTOTAL_API_KEY = os.getenv("VIRUSTOTAL_KEY", "MOCK_YOUR_VT_KEY_HERE")
 URLHAUS_API_URL = "https://urlhaus-api.abuse.ch/v1/url/"
 
 # Feature Extraction
@@ -86,39 +85,6 @@ async def check_urlhaus(url: str, client: httpx.AsyncClient) -> dict:
                 result["threat_type"] = data.get("threat_type", "malware_download")
     except (httpx.TimeoutException, httpx.RequestError):
         # Safe network timeout fallback: let local engines handle evaluation
-        pass
-    return result
-
-
-async def check_virustotal(url: str, client: httpx.AsyncClient) -> dict:
-    """Queries VirusTotal API v3 matching base64 identifiers concurrently."""
-    result = {"hit": False, "source": "VirusTotal"}
-    if VIRUSTOTAL_API_KEY == "MOCK_YOUR_VT_KEY_HERE":
-        return result
-
-    try:
-        # Standard VT API v3 requirement: encode URL to safe unpadded base64 representation
-        encoded_url = base64.urlsafe_b64encode(url.encode()).decode().strip("=")
-        vt_endpoint = f"https://www.virustotal.com/api/v3/urls/{encoded_url}"
-
-        response = await client.get(
-            vt_endpoint,
-            headers={"x-apikey": VIRUSTOTAL_API_KEY, "accept": "application/json"},
-            timeout=0.15,  # Enforce strict performance guardrails
-        )
-
-        if response.status_code == 200:
-            stats = (
-                response.json()
-                .get("data", {})
-                .get("attributes", {})
-                .get("last_analysis_stats", {})
-            )
-            # Flag malicious if 2 or more security vendors register engine positives
-            if stats.get("malicious", 0) >= 2:
-                result["hit"] = True
-                result["positives"] = stats.get("malicious")
-    except (httpx.TimeoutException, httpx.RequestError):
         pass
     return result
 
@@ -249,17 +215,12 @@ async def scan_url(payload: URLScanRequest) -> URLScanResponse:
     async with httpx.AsyncClient() as client:
         # Launch URLhaus and VirusTotal queries concurrently on the async event loop
         urlhaus_task = asyncio.create_task(check_urlhaus(target_url, client))
-        virustotal_task = asyncio.create_task(check_virustotal(target_url, client))
 
-        urlhaus_res, vt_res = await asyncio.gather(urlhaus_task, virustotal_task)
+        urlhaus_res = await asyncio.gather(urlhaus_task)
 
     if urlhaus_res.get("hit"):
         cti_hits.append(
             f"URLhaus Blacklist Match ({urlhaus_res.get('threat_type')})"
-        )
-    if vt_res.get("hit"):
-        cti_hits.append(
-            f"VirusTotal Blacklist Match ({vt_res.get('positives')} engine flags)"
         )
 
     
