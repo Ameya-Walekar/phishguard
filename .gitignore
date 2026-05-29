@@ -23,7 +23,6 @@ build/
 .idea/
 
 # ML/data
-*.joblib
 *.pkl
 datasets/
 *.csv
