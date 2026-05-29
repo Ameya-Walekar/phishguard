@@ -1,4 +1,3 @@
-
 #Importing Libraries
 
 import os
@@ -112,7 +111,7 @@ def execute_live_forensics(hostname: str) -> dict:
         if isinstance(creation_date, list): 
             creation_date = creation_date[0]
         print(f"[DEBUG] Domain Age: {(datetime.now(timezone.utc) - creation_date.astimezone(timezone.utc)).days} days")
-        print(f"[DEBUG] DNS 'A' Record Found: {verdict["dns_active"]}")
+        print(f"[DEBUG] DNS 'A' Record Found: {verdict['dns_active']}")
         if creation_date:
             age_days = (datetime.now(timezone.utc) - creation_date.astimezone(timezone.utc)).days
             if age_days < 14:  # Zero-day indicator rule flag
@@ -216,7 +215,7 @@ async def scan_url(payload: URLScanRequest) -> URLScanResponse:
         # Launch URLhaus and VirusTotal queries concurrently on the async event loop
         urlhaus_task = asyncio.create_task(check_urlhaus(target_url, client))
 
-        urlhaus_res = await asyncio.gather(urlhaus_task)
+        urlhaus_res = (await asyncio.gather(urlhaus_task))[0]
 
     if urlhaus_res.get("hit"):
         cti_hits.append(

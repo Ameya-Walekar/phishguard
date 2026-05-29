@@ -9,8 +9,13 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
 });
 
 async function analyzeUrl(url, tabId) {
+  // Bypass check must happen BEFORE the fetch, not after
+  if (url.startsWith('http://localhost:5173/') || url.startsWith('https://project-ocltx.vercel.app')) {
+    console.log("PhishGuard: Bypassing local development URL.");
+    return;
+  }
   try {
-    const response = await fetch(BACKEND_API_URL, {
+    const response = await fetch(BACKEND_API_URL + "/api/v1/scan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url: url }),
@@ -20,10 +25,6 @@ async function analyzeUrl(url, tabId) {
 
     const data = await response.json();
 
-    if (url.startsWith('http://localhost:5173/') || (url.startsWith('https://project-ocltx.vercel.app'))) {
-            console.log("PhishGuard: Bypassing local development URL.");
-            return; // Stop the function here
-        }
     // Route based on backend engine_verdict string
     const verdict = data.engine_verdict || "";
     if (verdict.startsWith("Safe (Lexical Score")) {
