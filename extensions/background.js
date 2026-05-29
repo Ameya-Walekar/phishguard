@@ -1,4 +1,4 @@
-const BACKEND_API_URL = "http://localhost:8000/api/v1/scan";
+const BACKEND_API_URL = "https://phishguard-backend-yh0j.onrender.com";
 
 // 1. SECURITY UPGRADE: Catch the URL before the page downloads!
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {

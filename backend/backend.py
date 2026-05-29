@@ -138,7 +138,7 @@ def normalize_url(url):
 async def lifespan(app: FastAPI):
     """Securely handles structural startup weight allocations and teardown cycles."""
     global ml_model
-    model_path = Path.cwd().parent /"ml_model_xgb.joblib"
+    model_path = Path(__file__).resolve().parent /"ml_model_xgb.joblib"
     if os.path.exists(model_path):
         try:
             ml_model = joblib.load(model_path)
