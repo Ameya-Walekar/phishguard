@@ -11,7 +11,14 @@ export const fetchLogs = async () => {
     }
     
     const data = await response.json();
-    return data;
+    const ignoredHosts = [
+      "https://6a1aa732c8c2cb19786f2be9--friendly-mandazi-cc5db3.netlify.app/"
+    ];
+
+    return data.filter(log => {
+      const url = log.url || log.website || "";
+      return !ignoredHosts.some(host => url.includes(host));
+    });
   } catch (error) {
     console.error("Failed to fetch threat logs:", error);
     
