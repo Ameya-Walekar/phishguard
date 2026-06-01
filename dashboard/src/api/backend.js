@@ -3,7 +3,8 @@
 const BASE_URL = 'https://phishguard-backend-yh0j.onrender.com';
 
 const ignoredHosts = [
-  "https://6a1aa732c8c2cb19786f2be9--friendly-mandazi-cc5db3.netlify.app/"
+  "https://6a1aa732c8c2cb19786f2be9--friendly-mandazi-cc5db3.netlify.app/",
+  "https://friendly-mandazi-cc5db3.netlify.app/"
 ];
 
 // Fetches historical scan logs from the FastAPI backend

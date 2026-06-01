@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { fetchLogs, clearLogs } from './api/backend';
+import { fetchLogs } from './api/backend';
 import ThreatChart from './components/ThreatChart';
 import {
   ShieldAlert, ShieldCheck, Activity, Download,
@@ -8,9 +8,7 @@ import {
 
 function App() {
   const [logs, setLogs] = useState([]);
-  const [isClearing, setIsClearing] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [clearError, setClearError] = useState(null);
   const [showConfirm, setShowConfirm] = useState(false);
 
   const loadIntelligence = useCallback(async (showSpinner = false) => {
@@ -24,24 +22,14 @@ function App() {
     loadIntelligence();
   }, [loadIntelligence]);
 
-  const handleClearLogs = async () => {
+  const handleClearLogs = () => {
+    setLogs([]);          // just wipe local state — no backend call
     setShowConfirm(false);
-    setIsClearing(true);
-    setClearError(null);
-    try {
-      await clearLogs();
-      setLogs([]);
-    } catch (err) {
-      setClearError("Failed to clear logs. Backend may be unavailable.");
-      console.error("Clear logs error:", err);
-    } finally {
-      setIsClearing(false);
-    }
   };
 
-  const blockedThreats = logs.filter(log => log.risk_score >= 0.7).length;
-  const safePasses    = logs.filter(log => log.risk_score <= 0.2).length;
-  const forensicTriage = logs.length - blockedThreats - safePasses;
+  const blockedThreats  = logs.filter(log => log.risk_score >= 0.7).length;
+  const safePasses      = logs.filter(log => log.risk_score <= 0.2).length;
+  const forensicTriage  = logs.length - blockedThreats - safePasses;
 
   const exportIoCReport = (log) => {
     const report = {
@@ -66,7 +54,7 @@ function App() {
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-gray-900 via-slate-900 to-black text-gray-100 p-4 font-sans overflow-hidden">
 
-      {/* Confirm dialog */}
+      {/* Confirm modal */}
       {showConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="bg-gray-900 border border-red-500/30 rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl shadow-red-900/20">
@@ -74,10 +62,10 @@ function App() {
               <div className="w-9 h-9 rounded-lg bg-red-500/10 border border-red-500/30 flex items-center justify-center">
                 <Trash2 className="w-4 h-4 text-red-400" />
               </div>
-              <h3 className="text-sm font-bold text-white tracking-wide">Clear All Logs?</h3>
+              <h3 className="text-sm font-bold text-white tracking-wide">Clear Dashboard?</h3>
             </div>
             <p className="text-xs text-gray-400 mb-5 leading-relaxed">
-              This will permanently delete all scan records from the backend. This action cannot be undone.
+              This will remove all entries from the dashboard view. The data on the backend is unaffected and will reload on next refresh.
             </p>
             <div className="flex gap-2">
               <button
@@ -90,7 +78,7 @@ function App() {
                 onClick={handleClearLogs}
                 className="flex-1 px-3 py-2 text-xs font-semibold bg-red-600 hover:bg-red-500 rounded-lg transition-colors text-white"
               >
-                Yes, Clear All
+                Yes, Clear View
               </button>
             </div>
           </div>
@@ -103,7 +91,6 @@ function App() {
           <Shield className="w-6 h-6 text-emerald-400" /> PhishGuard Dashboard
         </h1>
         <div className="flex items-center gap-2">
-          {/* Refresh button */}
           <button
             onClick={() => loadIntelligence(true)}
             disabled={isRefreshing}
@@ -112,8 +99,6 @@ function App() {
           >
             <RefreshCw className={`w-3.5 h-3.5 text-gray-400 ${isRefreshing ? 'animate-spin' : ''}`} />
           </button>
-
-          {/* System online badge */}
           <div className="px-3 py-1 bg-gray-800/50 backdrop-blur-md rounded-full text-[10px] border border-gray-700/50 flex items-center gap-2">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -124,19 +109,8 @@ function App() {
         </div>
       </header>
 
-      {/* Error banner */}
-      {clearError && (
-        <div className="flex-none mb-3 px-3 py-2 bg-red-900/30 border border-red-500/30 rounded-lg text-xs text-red-300 flex items-center gap-2">
-          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-          {clearError}
-          <button onClick={() => setClearError(null)} className="ml-auto text-red-400 hover:text-red-200">✕</button>
-        </div>
-      )}
-
-      {/* Top Section: Metrics + Graph */}
+      {/* Metrics + Graph */}
       <div className="flex-none grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-
-        {/* Metric Cards */}
         <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="bg-gray-800/40 backdrop-blur-sm p-3 rounded-lg border border-gray-700/50 flex flex-col justify-between">
             <div className="flex justify-between items-start">
@@ -168,43 +142,34 @@ function App() {
           </div>
         </div>
 
-        {/* Threat Graph */}
         <div className="lg:col-span-1 bg-gray-800/40 backdrop-blur-sm p-3 rounded-lg border border-gray-700/50 h-32 flex flex-col">
           <h2 className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1 flex items-center gap-1.5">
             <Activity className="w-3 h-3 text-blue-400" /> Risk Trends
           </h2>
           <div className="flex-1 min-h-0">
-            {logs.length > 0
-              ? <ThreatChart data={logs} />
-              : <p className="text-gray-500 text-[10px] font-mono">No data</p>
-            }
+            {logs.length > 0 ? <ThreatChart data={logs} /> : <p className="text-gray-500 text-[10px] font-mono">No data</p>}
           </div>
         </div>
       </div>
 
-      {/* Traffic Logs Table */}
+      {/* Traffic Logs */}
       <div className="flex-1 bg-gray-800/40 backdrop-blur-sm rounded-lg border border-gray-700/50 shadow-xl overflow-hidden flex flex-col">
         <div className="p-3 border-b border-gray-700/50 bg-gray-900/50 flex-none flex justify-between items-center">
           <h2 className="text-xs font-bold text-gray-300 uppercase tracking-widest flex items-center gap-2">
             <Server className="w-4 h-4 text-emerald-400" /> Live Intercepted Traffic
           </h2>
           <div className="flex items-center gap-2">
-            {/* Clear logs button */}
             <button
               onClick={() => setShowConfirm(true)}
-              disabled={isClearing || logs.length === 0}
-              title={logs.length === 0 ? "No logs to clear" : "Clear all logs"}
+              disabled={logs.length === 0}
+              title={logs.length === 0 ? "No logs to clear" : "Clear dashboard view"}
               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold
                          bg-red-900/20 border border-red-500/20 text-red-400
                          hover:bg-red-600 hover:text-white hover:border-red-600
                          disabled:opacity-30 disabled:cursor-not-allowed
                          transition-all duration-150"
             >
-              {isClearing
-                ? <RefreshCw className="w-3 h-3 animate-spin" />
-                : <Trash2 className="w-3 h-3" />
-              }
-              {isClearing ? 'Clearing…' : 'Clear Logs'}
+              <Trash2 className="w-3 h-3" /> Clear Logs
             </button>
             <Lock className="w-3.5 h-3.5 text-gray-600" />
           </div>
@@ -231,26 +196,16 @@ function App() {
                   <tr key={log.id} className="border-b border-gray-700/30 hover:bg-gray-700/40 transition-colors text-xs">
                     <td className="p-4 font-mono truncate max-w-[200px]">{log.url}</td>
                     <td className="p-4 text-center">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        log.risk_score >= 0.7
-                          ? 'bg-red-500/10 text-red-400 border border-red-500/30'
-                          : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                      }`}>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${log.risk_score >= 0.7 ? 'bg-red-500/10 text-red-400 border border-red-500/30' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'}`}>
                         {log.risk_score.toFixed(3)}
                       </span>
                     </td>
                     <td className="p-4 font-medium flex items-center gap-1.5">
-                      {log.status === "Safe"
-                        ? <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                        : <AlertTriangle className="w-3 h-3 text-red-400" />
-                      }
+                      {log.status === "Safe" ? <ShieldCheck className="w-3 h-3 text-emerald-400" /> : <AlertTriangle className="w-3 h-3 text-red-400" />}
                       {log.status}
                     </td>
                     <td className="p-4 text-right">
-                      <button
-                        onClick={() => exportIoCReport(log)}
-                        className="inline-flex items-center gap-1.5 bg-gray-700 hover:bg-emerald-600 px-2 py-1 rounded transition-colors text-[10px]"
-                      >
+                      <button onClick={() => exportIoCReport(log)} className="inline-flex items-center gap-1.5 bg-gray-700 hover:bg-emerald-600 px-2 py-1 rounded transition-colors text-[10px]">
                         <Download className="w-3 h-3" /> JSON
                       </button>
                     </td>
