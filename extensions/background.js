@@ -42,7 +42,22 @@ async function analyzeUrl(url, tabId) {
   }
 }
 
-// Path A Execution: low‑risk URLs, just log + tiny green toast
+// FIX: Central safe sendMessage helper that always consumes lastError
+// to silence "Receiving end does not exist" uncaught promise errors.
+function safeSendMessage(tabId, message, retryDelay, onSuccess) {
+  chrome.tabs.sendMessage(tabId, message, (response) => {
+    const err = chrome.runtime.lastError; // MUST be read here to consume it
+    if (err) {
+      if (retryDelay > 0) {
+        setTimeout(() => safeSendMessage(tabId, message, 0, onSuccess), retryDelay);
+      }
+    } else if (onSuccess) {
+      onSuccess(response);
+    }
+  });
+}
+
+// Path A Execution: low-risk URLs, just log + tiny green toast
 function handleSilentLog(url, scanData, tabId) {
   chrome.storage.local.get({ scanHistory: [] }, (result) => {
     const updatedHistory = result.scanHistory;
@@ -62,22 +77,8 @@ function handleSilentLog(url, scanData, tabId) {
         "color: #1df36fff"
       );
 
-      // NEW: Send a message to the content script to show the tiny green popup
       if (tabId) {
-        chrome.tabs.sendMessage(
-          tabId,
-          { action: "SHOW_SAFE_TOAST" },
-          () => {
-            // If content.js isn't ready yet, retry once after 500ms
-            if (chrome.runtime.lastError) {
-              setTimeout(() => {
-                chrome.tabs.sendMessage(tabId, {
-                  action: "SHOW_SAFE_TOAST",
-                });
-              }, 500);
-            }
-          }
-        );
+        safeSendMessage(tabId, { action: "SHOW_SAFE_TOAST" }, 500);
       }
     });
   });
@@ -103,21 +104,11 @@ function handleForensicSafeToast(url, scanData, tabId) {
       );
 
       if (tabId) {
-        const sendToast = () => {
-          chrome.tabs.sendMessage(
-            tabId,
-            {
-              action: "SHOW_FORENSIC_SAFE_TOAST",
-              payload: { probability: scanData.confidence_score },
-            },
-            () => {
-              if (chrome.runtime.lastError) {
-                setTimeout(sendToast, 500);
-              }
-            }
-          );
-        };
-        sendToast();
+        safeSendMessage(
+          tabId,
+          { action: "SHOW_FORENSIC_SAFE_TOAST", payload: { probability: scanData.confidence_score } },
+          500
+        );
       }
     });
   });
@@ -143,28 +134,16 @@ function handlePromptIntervention(tabId, url, scanData) {
 
     chrome.storage.local.set({ scanHistory: updatedHistory }, () => {
       // 2. TIMING UPGRADE: Retry loop for the messaging system
-      const sendAlert = () => {
-        chrome.tabs.sendMessage(
-          tabId,
-          {
-            action: "TRIGGER_ALERT",
-            payload: {
-              url: url,
-              probability: scanData.confidence_score,
-              status: isMalicious ? "Malicious" : "Suspicious",
-              forensics: scanData.forensics_log,
-            },
-          },
-          () => {
-            // If content.js isn't awake yet, try again in 50 milliseconds
-            if (chrome.runtime.lastError) {
-              setTimeout(sendAlert, 50);
-            }
-          }
-        );
+      const payload = {
+        action: "TRIGGER_ALERT",
+        payload: {
+          url: url,
+          probability: scanData.confidence_score,
+          status: isMalicious ? "Malicious" : "Suspicious",
+          forensics: scanData.forensics_log,
+        },
       };
-
-      sendAlert();
+      safeSendMessage(tabId, payload, 50);
     });
   });
 }
