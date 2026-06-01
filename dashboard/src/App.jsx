@@ -114,7 +114,7 @@ function App() {
             <thead className="bg-gray-900 sticky top-0 z-10 text-gray-400 text-[10px] uppercase tracking-widest border-b border-gray-700/50">
               <tr>
                 <th className="p-4 font-semibold">Target URL</th>
-                <th className="p-4 font-semibold text-center w-24">Risk (Based on lexical features)</th>
+                <th className="p-4 font-semibold text-center w-24">Lexical Risk</th>
                 <th className="p-4 font-semibold w-24">Status</th>
                 <th className="p-4 font-semibold text-right w-24">Action</th>
               </tr>
