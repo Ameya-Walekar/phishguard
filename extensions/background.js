@@ -10,7 +10,8 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
 
 async function analyzeUrl(url, tabId) {
   // Bypass check must happen BEFORE the fetch, not after
-  if (url.startsWith('http://localhost:5173/') || url.startsWith('https://project-ocltx.vercel.app')) {
+  if (url.startsWith('http://localhost:5173/') || url.startsWith('https://project-ocltx.vercel.app') ||
+  url.startsWith('https://6a1aa732c8c2cb19786f2be9--friendly-mandazi-cc5db3.netlify.app')) {
     console.log("PhishGuard: Bypassing local development URL.");
     return;
   }
