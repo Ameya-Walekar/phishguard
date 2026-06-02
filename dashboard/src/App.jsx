@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { fetchLogs } from './api/backend';
+import { fetchLogs, clearLogs } from './api/backend';
 import ThreatChart from './components/ThreatChart';
 import {
   ShieldAlert, ShieldCheck, Activity, Download,
@@ -22,10 +22,16 @@ function App() {
     loadIntelligence();
   }, [loadIntelligence]);
 
-  const handleClearLogs = () => {
-    setLogs([]);          // just wipe local state — no backend call
+  const handleClearLogs = async () => {
+  try {
+    await clearLogs();
+    setLogs([]);
+  } catch (error) {
+    console.error("Failed to clear logs:", error);
+  } finally {
     setShowConfirm(false);
-  };
+  }
+};
 
   const blockedThreats  = logs.filter(log => log.risk_score >= 0.7).length;
   const safePasses      = logs.filter(log => log.risk_score <= 0.2).length;
