@@ -27,7 +27,7 @@ async function analyzeUrl(url, tabId) {
     const data = await response.json();
 
     // Route based on backend engine_verdict string
-    const verdict = data.engine_verdict || "";
+    const verdict = data.engineverdict || "";
     if (verdict.startsWith("Safe (Lexical Score")) {
       // Path A: Low-risk, tiny green toast
       handleSilentLog(url, data, tabId);
@@ -148,3 +148,6 @@ function handlePromptIntervention(tabId, url, scanData) {
     });
   });
 }
+setInterval(() => {
+  fetch(BACKEND_API_URL + "/health").catch(() => {});
+}, 14 * 60 * 1000);
