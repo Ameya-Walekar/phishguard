@@ -23,15 +23,10 @@ function App() {
   }, [loadIntelligence]);
 
   const handleClearLogs = async () => {
-  try {
-    await clearLogs();
+    await clearLogs();    // wipe backend data so it doesn't reload on refresh
     setLogs([]);
-  } catch (error) {
-    console.error("Failed to clear logs:", error);
-  } finally {
     setShowConfirm(false);
-  }
-};
+  };
 
   const blockedThreats  = logs.filter(log => log.risk_score >= 0.7).length;
   const safePasses      = logs.filter(log => log.risk_score <= 0.2).length;
@@ -71,7 +66,7 @@ function App() {
               <h3 className="text-sm font-bold text-white tracking-wide">Clear Dashboard?</h3>
             </div>
             <p className="text-xs text-gray-400 mb-5 leading-relaxed">
-              This will remove all entries from the dashboard view. The data on the backend is unaffected and will reload on next refresh.
+              This will remove all entries from the dashboard and clear the backend. Only sites visited after this point will appear.
             </p>
             <div className="flex gap-2">
               <button

@@ -335,3 +335,8 @@ def health_check():
 async def get_logs():
     # Returns all stored scan results from persistent JSON file
     return load_db()
+
+@app.delete("/api/logs")
+async def delete_logs():
+    save_db([])
+    return {"status": "cleared"}
