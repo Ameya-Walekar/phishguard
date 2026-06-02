@@ -197,7 +197,7 @@ function App() {
                   <tr key={log.id} className="border-b border-gray-700/30 hover:bg-gray-700/40 transition-colors text-xs">
                     <td className="p-4 font-mono truncate max-w-[200px]">{log.url}</td>
                     <td className="p-4 text-center">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${log.risk_score >= 0.7 ? 'bg-red-500/10 text-red-400 border border-red-500/30' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'}`}>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${log.risk_score >= 0.7 ? 'bg-red-500/10 text-red-400 border border-red-500/30' : (log.risk_score <=0.2 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/10 text-amber-400 border border-amber-500/30')}`}>
                         {log.risk_score.toFixed(3)}
                       </span>
                     </td>
