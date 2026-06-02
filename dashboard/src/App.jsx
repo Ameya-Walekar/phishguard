@@ -201,9 +201,32 @@ function App() {
                         {log.risk_score.toFixed(3)}
                       </span>
                     </td>
-                    <td className="p-4 font-medium flex items-center gap-1.5">
-                      {log.status === "Safe" ? <ShieldCheck className="w-3 h-3 text-emerald-400" /> : <AlertTriangle className="w-3 h-3 text-red-400" />}
-                      {log.status}
+                    <td className="p-4">
+                      <div className="flex items-center justify-center gap-2">
+                        {log.status === "Malicious" ? (
+                          <AlertTriangle className="w-3 h-3 text-red-400" />
+                        ) : log.status === "Safe" && log.risk_score > 0.2 ? (
+                          <ShieldCheck className="w-3 h-3 text-amber-400" />
+                        ) : (
+                          <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                        )}
+
+                        <span
+                          className={`text-xs font-semibold ${
+                            log.status === "Malicious"
+                              ? "text-red-400"
+                              : log.status === "Safe" && log.risk_score > 0.2
+                              ? "text-amber-400"
+                              : "text-emerald-400"
+                          }`}
+                        >
+                          {log.status === "Malicious"
+                            ? "Malicious"
+                            : log.status === "Safe" && log.risk_score > 0.2
+                            ? "Safe by forensic analysis"
+                            : "Safe"}
+                        </span>
+                      </div>
                     </td>
                     <td className="p-4 text-right">
                       <button onClick={() => exportIoCReport(log)} className="inline-flex items-center gap-1.5 bg-gray-700 hover:bg-emerald-600 px-2 py-1 rounded transition-colors text-[10px]">
