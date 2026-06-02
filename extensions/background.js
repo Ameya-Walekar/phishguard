@@ -27,7 +27,7 @@ async function analyzeUrl(url, tabId) {
     const data = await response.json();
 
     // Route based on backend engine_verdict string
-    const verdict = data.engineverdict || "";
+    const verdict = data.engine_verdict || "";
     if (verdict.startsWith("Safe (Lexical Score")) {
       // Path A: Low-risk, tiny green toast
       handleSilentLog(url, data, tabId);
