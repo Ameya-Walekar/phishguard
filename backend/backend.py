@@ -68,30 +68,47 @@ def check_ip_in_domain(netloc: str) -> int:
 def extract_lexical_features(url: str) -> list:
     url_str = str(url)
 
-    # Prepend scheme only for urlparse component splitting
     temp = ("http://" + url_str) if not url_str.startswith("http") else url_str
     parsed = urlparse(temp)
-    hostname = parsed.netloc.split(":")[0]   # strip port
-    path     = parsed.path
-    parts    = hostname.split(".")
-    tld      = parts[-1].lower() if parts else ""
+    hostname = parsed.netloc.split(":")[0]
+    path = parsed.path
+    parts = hostname.split(".")
+    tld = parts[-1].lower() if parts else ""
+
+    # Original 9
+    url_length = len(url_str)
+    hostname_length = len(hostname)
+    dot_count = url_str.count('.')
+    hyphen_count = url_str.count('-')
+    at_count = url_str.count('@')
+    query_count = url_str.count('?')
+    is_ip = check_ip_in_domain(parsed.netloc)
+    url_entropy = calculate_shannon_entropy(url_str)
+
+    # 7 added features
+    subdomain_count = max(len(parts) - 2, 0)
+    suspicious_tld = int(tld in SUSPICIOUS_TLDS)
+    digit_ratio = sum(c.isdigit() for c in hostname) / max(len(hostname), 1)
+    has_port = int(":" in parsed.netloc)
+    path_depth = path.count('/')
+    brand_in_subdomain = int(any(b in hostname.lower() for b in BRAND_KEYWORDS))
+    is_url_shortener = int(hostname.lower() in URL_SHORTENERS)
+
+    # 5 new features
+    url_digit_ratio = sum(c.isdigit() for c in url_str) / max(len(url_str), 1)
+    special_char_count = sum(c in '!~,+\\_%=' for c in url_str)
+    hostname_tokens = re.split(r'[\.\-]', hostname)
+    longest_hostname_token = max((len(w) for w in hostname_tokens), default=0)
+    numeric_token_count = len(re.findall(r'\d+', path))
+    tld_length = len(tld)
 
     return [
-        len(url_str),                                                           # url_length
-        len(hostname),                                                          # hostname_length
-        url_str.count('.'),                                                     # dot_count
-        url_str.count('-'),                                                     # hyphen_count
-        url_str.count('@'),                                                     # at_count
-        url_str.count('?'),                                                     # query_count
-        check_ip_in_domain(parsed.netloc),                                     # is_ip
-        calculate_shannon_entropy(url_str),                                    # url_entropy
-        max(len(parts) - 2, 0),                                                # subdomain_count
-        int(tld in SUSPICIOUS_TLDS),                                           # suspicious_tld
-        sum(c.isdigit() for c in hostname) / max(len(hostname), 1),            # digit_ratio
-        int(":" in parsed.netloc),                                             # has_port
-        path.count('/'),                                                        # path_depth
-        int(any(b in hostname.lower() for b in BRAND_KEYWORDS)),               # brand_in_subdomain
-        int(hostname.lower() in URL_SHORTENERS),                               # is_url_shortener
+        url_length, hostname_length, dot_count, hyphen_count, at_count,
+        query_count, is_ip, url_entropy, subdomain_count,
+        suspicious_tld, digit_ratio, has_port, path_depth,
+        brand_in_subdomain, is_url_shortener,
+        url_digit_ratio, special_char_count, longest_hostname_token,
+        numeric_token_count, tld_length
     ]
 
 
