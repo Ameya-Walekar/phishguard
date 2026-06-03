@@ -82,7 +82,6 @@ def extract_lexical_features(url: str) -> list:
         url_str.count('.'),                                                     # dot_count
         url_str.count('-'),                                                     # hyphen_count
         url_str.count('@'),                                                     # at_count
-        url_str.count('/'),                                                     # slash_count
         url_str.count('?'),                                                     # query_count
         check_ip_in_domain(parsed.netloc),                                     # is_ip
         calculate_shannon_entropy(url_str),                                    # url_entropy
