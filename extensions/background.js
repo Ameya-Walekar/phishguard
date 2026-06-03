@@ -16,11 +16,16 @@ async function analyzeUrl(url, tabId) {
     return;
   }
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 9000); // 9s covers Render cold start
+
     const response = await fetch(BACKEND_API_URL + "/api/v1/scan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url: url }),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
 
     if (!response.ok) throw new Error("Backend API unreachable");
 
@@ -39,7 +44,11 @@ async function analyzeUrl(url, tabId) {
       handlePromptIntervention(tabId, url, data);
     }
   } catch (error) {
-    console.error("PhishGuard Analysis Error:", error);
+    if (error.name === "AbortError") {
+      console.warn("PhishGuard: Backend cold-starting, scan skipped for:", url);
+    } else {
+      console.warn("PhishGuard: Backend unreachable, scan skipped for:", url);
+    }
   }
 }
 
