@@ -410,7 +410,7 @@ async def scan_url(payload: URLScanRequest) -> URLScanResponse:
             features = extract_lexical_features(target_lex_url)
             print(f"🚨 2. CALCULATED FEATURES: {features}")
             probabilities = ml_model.predict_proba([features])[0]
-            phishing_prob = float(probabilities[1])   # index 1 = malicious probability
+            phishing_prob = float(probabilities[0])   # index 1 = malicious probability
             safe_prob     = float(probabilities[0])
             print(f"DEBUG: Raw Probabilities: safe={safe_prob:.4f}, malicious={phishing_prob:.4f}")
 
@@ -430,7 +430,7 @@ async def scan_url(payload: URLScanRequest) -> URLScanResponse:
             phishing_prob = adjust_for_path_complexity(target_lex_url, phishing_prob)
 
             # --- TRIAGE ROUTING ---
-            if phishing_prob < 0.3:
+            if phishing_prob < 0.2:
                 is_phishing = False
                 confidence  = safe_prob
                 verdict     = "Safe (Lexical Score Validated Low Risk)"
