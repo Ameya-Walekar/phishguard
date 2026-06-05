@@ -137,7 +137,7 @@ def adjust_for_path_complexity(url: str, phishing_prob: float) -> float:
         legitimacy_signals += 1
 
     if legitimacy_signals >= 3:
-        adjusted = min(phishing_prob, 0.65)
+        adjusted = phishing_prob - 0.3
         print(f"[PATH-ADJUST] legitimacy_signals={legitimacy_signals}, "
               f"score {phishing_prob:.3f} → {adjusted:.3f} (forensics will validate)")
         return adjusted
