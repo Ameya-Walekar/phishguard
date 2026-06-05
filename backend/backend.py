@@ -59,6 +59,91 @@ URL_SHORTENERS = {
     "shorturl.at","is.gd","rb.gy","cutt.ly"
 }
 
+# Populated at startup from top_domains.json (serialized during training)
+TOP_DOMAINS: set[str] = set()
+
+def levenshtein(a: str, b: str) -> int:
+    dp = list(range(len(b) + 1))
+    for i, ca in enumerate(a):
+        ndp = [i + 1]
+        for j, cb in enumerate(b):
+            ndp.append(min(ndp[j] + 1, dp[j + 1] + 1, dp[j] + (ca != cb)))
+        dp = ndp
+    return dp[-1]
+
+def get_typosquat_score(hostname: str) -> float:
+    """
+    Returns a suspicion boost (0.0–0.15) if the registered domain is
+    suspiciously close to a known-legitimate domain but is NOT that domain.
+    Uses length pre-filter to keep inference fast.
+    """
+    parts = hostname.split(".")
+    candidate = parts[-2].lower() if len(parts) >= 2 else hostname.lower()
+
+    if candidate in TOP_DOMAINS:   # exact match → legitimate
+        return 0.0
+
+    clen = len(candidate)
+    for ref in TOP_DOMAINS:
+        if abs(len(ref) - clen) > 2:  # length pre-filter — skips ~80% of comparisons
+            continue
+        threshold = 1 if len(ref) <= 5 else 2
+        dist = levenshtein(candidate, ref)
+        if 0 < dist <= threshold:
+            print(f"[TYPOSQUAT] '{candidate}' ~ '{ref}' (dist={dist})")
+            return 0.15             # boost phishing probability by this amount
+    return 0.0
+
+def adjust_for_path_complexity(url: str, phishing_prob: float) -> float:
+    """
+    If the model fires primarily on path_depth/numeric_token_count but
+    the hostname itself looks clean, pull the score below 0.7 so
+    forensics validates it instead of issuing an instant malicious verdict.
+    Only intervenes when phishing_prob is in the (0.7, 0.9] band —
+    scores above 0.9 have strong multi-feature consensus and are left alone.
+    """
+    if not (0.7 < phishing_prob <= 0.9):
+        return phishing_prob
+
+    parsed = urlparse(url if url.startswith("http") else "http://" + url)
+    hostname = parsed.netloc.split(":")[0].lower()
+    path     = parsed.path
+    parts    = hostname.split(".")
+    tld      = parts[-1] if parts else ""
+
+    legitimacy_signals = 0
+
+    # Signal 1: registered domain is purely alphabetic and reasonably long
+    registered = parts[-2] if len(parts) >= 2 else hostname
+    if registered.isalpha() and len(registered) >= 5:
+        legitimacy_signals += 1
+
+    # Signal 2: common trustworthy TLD
+    if tld in {"com", "org", "net", "edu", "io", "dev", "gov", "ac"}:
+        legitimacy_signals += 1
+
+    # Signal 3: numeric tokens in path but NO obfuscation chars
+    has_obfuscation = bool(re.search(r'[%@=~\\]', path))
+    has_numeric_path = bool(re.search(r'\d+', path))
+    if has_numeric_path and not has_obfuscation:
+        legitimacy_signals += 1
+
+    # Signal 4: no subdomains (clean apex domain)
+    if max(len(parts) - 2, 0) == 0:
+        legitimacy_signals += 1
+
+    # Signal 5: no hyphens in hostname (hyphens are a common phishing tell)
+    if "-" not in hostname:
+        legitimacy_signals += 1
+
+    if legitimacy_signals >= 3:
+        adjusted = min(phishing_prob, 0.65)
+        print(f"[PATH-ADJUST] legitimacy_signals={legitimacy_signals}, "
+              f"score {phishing_prob:.3f} → {adjusted:.3f} (forensics will validate)")
+        return adjusted
+
+    return phishing_prob
+
 def check_ip_in_domain(netloc: str) -> int:
     host = netloc.split(":")[0]
     ipv4_pattern = re.compile(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")
@@ -184,8 +269,8 @@ def normalize_url(url):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Securely handles structural startup weight allocations and teardown cycles."""
-    global ml_model
-    model_path = Path(__file__).resolve().parent /"ml_model_xgb.joblib"
+    global ml_model, TOP_DOMAINS
+    model_path = Path(__file__).resolve().parent / "ml_model_xgb.joblib"
     if os.path.exists(model_path):
         try:
             ml_model = joblib.load(model_path)
@@ -200,6 +285,18 @@ async def lifespan(app: FastAPI):
             f"[!] Warning: '{model_path}' not located. Safe engine fallback pipeline deployed."
         )
         ml_model = None
+
+    # Load reference domain list for typosquat detection (serialized at training time)
+    domains_path = Path(__file__).resolve().parent / "top_domains.json"
+    if domains_path.exists():
+        try:
+            with open(domains_path) as f:
+                TOP_DOMAINS = set(json.load(f))
+            print(f"[+] Loaded {len(TOP_DOMAINS)} reference domains for typosquat detection.")
+        except Exception as e:
+            print(f"[!] top_domains.json load failed: {e}. Typosquat detection disabled.")
+    else:
+        print("[!] top_domains.json not found. Typosquat detection disabled.")
 
     # Startup complete
     yield
@@ -313,18 +410,35 @@ async def scan_url(payload: URLScanRequest) -> URLScanResponse:
             features = extract_lexical_features(target_lex_url)
             print(f"🚨 2. CALCULATED FEATURES: {features}")
             probabilities = ml_model.predict_proba([features])[0]
-            phishing_prob = float(probabilities[0])
-            print(f"DEBUG: Raw Probabilities: {probabilities}")
-            
-            if phishing_prob < 0.2:
+            phishing_prob = float(probabilities[1])   # index 1 = malicious probability
+            safe_prob     = float(probabilities[0])
+            print(f"DEBUG: Raw Probabilities: safe={safe_prob:.4f}, malicious={phishing_prob:.4f}")
+
+            # --- POST-PREDICTION ADJUSTMENTS ---
+
+            # 1. Typosquat boost: if hostname resembles a legit domain, raise suspicion
+            parsed_hostname = urlparse(
+                target_lex_url if target_lex_url.startswith("http") else "http://" + target_lex_url
+            ).netloc.split(":")[0]
+            typosquat_boost = get_typosquat_score(parsed_hostname)
+            if typosquat_boost > 0:
+                phishing_prob = min(phishing_prob + typosquat_boost, 1.0)
+                print(f"[TYPOSQUAT] Probability boosted → {phishing_prob:.4f}")
+
+            # 2. Path-complexity dampener: pull high scores into forensics zone
+            #    when hostname signals look clean (e.g. codeforces.com/problem/1234/A)
+            phishing_prob = adjust_for_path_complexity(target_lex_url, phishing_prob)
+
+            # --- TRIAGE ROUTING ---
+            if phishing_prob < 0.3:
                 is_phishing = False
-                confidence = float(probabilities[0])
-                verdict = "Safe (Lexical Score Validated Low Risk)"
+                confidence  = safe_prob
+                verdict     = "Safe (Lexical Score Validated Low Risk)"
 
             elif phishing_prob > 0.7:
                 is_phishing = True
-                confidence = phishing_prob
-                verdict = "Malicious (Lexical Fingerprint High Risk Match)"
+                confidence  = phishing_prob
+                verdict     = "Malicious (Lexical Fingerprint High Risk Match)"
             else:
                 forensics_run = True
                 # Offload blocking network sockets to background thread pool
@@ -337,14 +451,14 @@ async def scan_url(payload: URLScanRequest) -> URLScanResponse:
                     or forensics_data.get("dns_active") is False
                 ):
                     is_phishing = True
-                    confidence = phishing_prob
-                    verdict = (
+                    confidence  = phishing_prob
+                    verdict     = (
                         "Malicious (Ambiguous Lexical Match Confirmed by Forensics)"
                     )
                 else:
                     is_phishing = False
-                    confidence = float(phishing_prob)
-                    verdict = (
+                    confidence  = phishing_prob
+                    verdict     = (
                         "Safe (Ambiguous Lexical Suspicion Cleared by Forensics)"
                     )
 
