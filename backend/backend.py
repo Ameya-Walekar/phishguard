@@ -102,7 +102,7 @@ def adjust_for_path_complexity(url: str, phishing_prob: float) -> float:
     Only intervenes when phishing_prob is in the (0.7, 0.9] band —
     scores above 0.9 have strong multi-feature consensus and are left alone.
     """
-    if not (0.7 < phishing_prob <= 0.9):
+    if not (0.7 < phishing_prob <= 1):
         return phishing_prob
 
     parsed = urlparse(url if url.startswith("http") else "http://" + url)
