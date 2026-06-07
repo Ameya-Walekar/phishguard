@@ -1,15 +1,27 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchLogs, clearLogs } from './api/backend';
 import ThreatChart from './components/ThreatChart';
 import {
-  ShieldAlert, ShieldCheck, Activity, Download,
-  Server, AlertTriangle, Shield, Lock, Trash2, RefreshCw
+  ShieldAlert, ShieldCheck, Activity, Download, FileDown,
+  Server, AlertTriangle, Shield, Lock, Trash2, RefreshCw, ChevronDown
 } from 'lucide-react';
 
 function App() {
   const [logs, setLogs] = useState([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const exportMenuRef = useRef(null);
+
+  // Close export dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const loadIntelligence = useCallback(async (showSpinner = false) => {
     if (showSpinner) setIsRefreshing(true);
@@ -32,6 +44,8 @@ function App() {
   const safePasses      = logs.filter(log => log.risk_score <= 0.2).length;
   const forensicTriage  = logs.length - blockedThreats - safePasses;
 
+  const [showExportMenu, setShowExportMenu] = useState(false);
+
   const exportIoCReport = (log) => {
     const report = {
       timestamp: new Date().toISOString(),
@@ -50,6 +64,51 @@ function App() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const exportAllLogs = (format) => {
+    setShowExportMenu(false);
+    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+
+    if (format === "json") {
+      const report = {
+        exported_at: new Date().toISOString(),
+        total_entries: logs.length,
+        summary: { malicious: blockedThreats, triage: forensicTriage, safe: safePasses },
+        entries: logs.map(log => ({
+          id: log.id,
+          url: log.url,
+          risk_score: log.risk_score,
+          status: log.status,
+          action_taken: log.risk_score >= 0.7 ? "Blocked by Extension" : "Silently Monitored",
+        })),
+      };
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `PhishGuard_AllLogs_${ts}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+    } else if (format === "csv") {
+      const header = ["id", "url", "risk_score", "status", "action_taken"];
+      const rows = logs.map(log => [
+        log.id,
+        `"${(log.url || "").replace(/"/g, '""')}"`,
+        log.risk_score,
+        log.status,
+        log.risk_score >= 0.7 ? "Blocked by Extension" : "Silently Monitored",
+      ]);
+      const csv = [header, ...rows].map(r => r.join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv" });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `PhishGuard_AllLogs_${ts}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
   return (
@@ -160,6 +219,43 @@ function App() {
             <Server className="w-4 h-4 text-emerald-400" /> Live Intercepted Traffic
           </h2>
           <div className="flex items-center gap-2">
+            {/* Export All dropdown */}
+            <div className="relative" ref={exportMenuRef}>
+              <button
+                onClick={() => setShowExportMenu(prev => !prev)}
+                disabled={logs.length === 0}
+                title={logs.length === 0 ? "No logs to export" : "Export all logs"}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold
+                           bg-emerald-900/20 border border-emerald-500/20 text-emerald-400
+                           hover:bg-emerald-600 hover:text-white hover:border-emerald-600
+                           disabled:opacity-30 disabled:cursor-not-allowed
+                           transition-all duration-150"
+              >
+                <FileDown className="w-3 h-3" /> Export All
+                <ChevronDown className={`w-3 h-3 transition-transform duration-150 ${showExportMenu ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showExportMenu && (
+                <div className="absolute right-0 top-full mt-1.5 z-20 bg-gray-900 border border-gray-700/70 rounded-lg shadow-2xl shadow-black/60 overflow-hidden min-w-[130px]">
+                  <button
+                    onClick={() => exportAllLogs("json")}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-gray-300
+                               hover:bg-emerald-600/20 hover:text-emerald-300 transition-colors"
+                  >
+                    <Download className="w-3 h-3" /> JSON Bundle
+                  </button>
+                  <div className="border-t border-gray-800" />
+                  <button
+                    onClick={() => exportAllLogs("csv")}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-[10px] font-semibold text-gray-300
+                               hover:bg-cyan-600/20 hover:text-cyan-300 transition-colors"
+                  >
+                    <Download className="w-3 h-3" /> CSV Spreadsheet
+                  </button>
+                </div>
+              )}
+            </div>
+
             <button
               onClick={() => setShowConfirm(true)}
               disabled={logs.length === 0}
