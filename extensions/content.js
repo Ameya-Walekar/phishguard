@@ -11,15 +11,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-// FIX: Creates an isolated Shadow DOM host so the injected HTML lives in its
-// own DOM tree. The host page's Content Security Policy only governs its own
-// document — it cannot reach inside a shadow root, which silences the
-// "inline script violates CSP" console errors entirely.
 function createShadowHost(id) {
   if (document.getElementById(id)) return null;
   const host = document.createElement("div");
   host.id = id;
-  // Reset all inherited styles so the host page can't accidentally affect us
+  
   host.style.cssText = "all:initial;position:fixed;z-index:2147483647;";
   document.documentElement.appendChild(host);
   const shadow = host.attachShadow({ mode: "closed" });

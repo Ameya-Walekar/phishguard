@@ -25,10 +25,9 @@ try:
 except ImportError:
     FORENSIC_LIBS_AVAILABLE = False
 
-# Global runtime pointer holding the serialized machine learning model in RAM
 ml_model = None
 
-# CTI : Directly checking if a particular url is reported as phishing
+
 URLHAUS_API_URL = "https://urlhaus-api.abuse.ch/v1/url/"
 
 # Feature Extraction
@@ -80,28 +79,21 @@ def get_typosquat_score(hostname: str) -> float:
     parts = hostname.split(".")
     candidate = parts[-2].lower() if len(parts) >= 2 else hostname.lower()
 
-    if candidate in TOP_DOMAINS:   # exact match → legitimate
+    if candidate in TOP_DOMAINS:  
         return 0.0
 
     clen = len(candidate)
     for ref in TOP_DOMAINS:
-        if abs(len(ref) - clen) > 2:  # length pre-filter — skips ~80% of comparisons
+        if abs(len(ref) - clen) > 2: 
             continue
         threshold = 1 if len(ref) <= 5 else 2
         dist = levenshtein(candidate, ref)
         if 0 < dist <= threshold:
             print(f"[TYPOSQUAT] '{candidate}' ~ '{ref}' (dist={dist})")
-            return 0.15             # boost phishing probability by this amount
+            return 0.15             
     return 0.0
 
 def adjust_for_path_complexity(url: str, phishing_prob: float) -> float:
-    """
-    If the model fires primarily on path_depth/numeric_token_count but
-    the hostname itself looks clean, pull the score below 0.7 so
-    forensics validates it instead of issuing an instant malicious verdict.
-    Only intervenes when phishing_prob is in the (0.7, 0.9] band —
-    scores above 0.9 have strong multi-feature consensus and are left alone.
-    """
     if not (0.7 < phishing_prob <= 1):
         return phishing_prob
 
@@ -160,7 +152,6 @@ def extract_lexical_features(url: str) -> list:
     parts = hostname.split(".")
     tld = parts[-1].lower() if parts else ""
 
-    # Original 9
     url_length = len(url_str)
     hostname_length = len(hostname)
     dot_count = url_str.count('.')
@@ -169,8 +160,6 @@ def extract_lexical_features(url: str) -> list:
     query_count = url_str.count('?')
     is_ip = check_ip_in_domain(parsed.netloc)
     url_entropy = calculate_shannon_entropy(url_str)
-
-    # 7 added features
     subdomain_count = max(len(parts) - 2, 0)
     suspicious_tld = int(tld in SUSPICIOUS_TLDS)
     digit_ratio = sum(c.isdigit() for c in hostname) / max(len(hostname), 1)
@@ -178,8 +167,6 @@ def extract_lexical_features(url: str) -> list:
     path_depth = path.count('/')
     brand_in_subdomain = int(any(b in hostname.lower() for b in BRAND_KEYWORDS))
     is_url_shortener = int(hostname.lower() in URL_SHORTENERS)
-
-    # 5 new features
     url_digit_ratio = sum(c.isdigit() for c in url_str) / max(len(url_str), 1)
     special_char_count = sum(c in '!~,+\\_%=' for c in url_str)
     hostname_tokens = re.split(r'[\.\-]', hostname)
@@ -197,7 +184,7 @@ def extract_lexical_features(url: str) -> list:
     ]
 
 
-# CTI
+# CTI : Directly checking if a particular url is reported as phishing
 
 
 async def check_urlhaus(url: str, client: httpx.AsyncClient) -> dict:
@@ -207,7 +194,7 @@ async def check_urlhaus(url: str, client: httpx.AsyncClient) -> dict:
         response = await client.post(
             URLHAUS_API_URL,
             data={"url": url},
-            timeout=0.15,  # Enforce explicit 150ms ceiling constraint
+            timeout=0.15, 
         )
 
         if response.status_code == 200:
@@ -216,7 +203,6 @@ async def check_urlhaus(url: str, client: httpx.AsyncClient) -> dict:
                 result["hit"] = True
                 result["threat_type"] = data.get("threat_type", "malware_download")
     except (httpx.TimeoutException, httpx.RequestError):
-        # Safe network timeout fallback: let local engines handle evaluation
         pass
     return result
 
@@ -238,7 +224,7 @@ def execute_live_forensics(hostname: str) -> dict:
         dns.resolver.resolve(clean_host, "A")
         verdict["dns_active"] = True
 
-        # 2. Registrar Registration Age Calculations
+        # 2. Domain Age Calculations
         domain_info = whois.whois(clean_host)
         creation_date = domain_info.creation_date
         if isinstance(creation_date, list): 
@@ -247,7 +233,7 @@ def execute_live_forensics(hostname: str) -> dict:
         print(f"[DEBUG] DNS 'A' Record Found: {verdict['dns_active']}")
         if creation_date:
             age_days = (datetime.now(timezone.utc) - creation_date.astimezone(timezone.utc)).days
-            if age_days < 14:  # Zero-day indicator rule flag
+            if age_days < 14:  
                 verdict["is_new_domain"] = True
     except Exception as e:
         print(f"[ERROR] {e}")
@@ -263,7 +249,7 @@ def normalize_url(url):
         url = url[7:]
     return url.rstrip('/') 
 
-# --- 4. MODERN LIFESPAN APP INITIALIZATION ---
+# App Initialization
 
 
 @asynccontextmanager
@@ -286,7 +272,7 @@ async def lifespan(app: FastAPI):
         )
         ml_model = None
 
-    # Load reference domain list for typosquat detection (serialized at training time)
+    # Load serialized safe domain list for typosquat detection 
     domains_path = Path(__file__).resolve().parent / "top_domains.json"
     if domains_path.exists():
         try:
@@ -297,8 +283,6 @@ async def lifespan(app: FastAPI):
             print(f"[!] top_domains.json load failed: {e}. Typosquat detection disabled.")
     else:
         print("[!] top_domains.json not found. Typosquat detection disabled.")
-
-    # Startup complete
     yield
 
     print("[-] Tearing down application: Flushing structural vector arrays.")
@@ -311,8 +295,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],      # Allows Chrome extensions (null origin) + dashboard + localhost
-    allow_credentials=False,  # Must be False when allow_origins=["*"]
+    allow_origins=["*"],     
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -331,9 +315,6 @@ class URLScanResponse(BaseModel):
     forensics_log: dict
 
 
-# --- 5. COMPLETED HYBRID TRIAGE ROUTING PIPELINE ---
-
-# Persistent JSON log file — survives Render cold starts
 DB_FILE = Path(__file__).resolve().parent / "scan_logs.json"
 
 def load_db() -> list:
@@ -364,9 +345,8 @@ async def scan_url(payload: URLScanRequest) -> URLScanResponse:
     forensics_run = False
     forensics_data: dict = {}
 
-    # STAGE 1: ASYNC CTI THREAT FEED CO-PROCESSING
+    # CTI
     async with httpx.AsyncClient() as client:
-        # Launch URLhaus and VirusTotal queries concurrently on the async event loop
         urlhaus_task = asyncio.create_task(check_urlhaus(target_url, client))
 
         urlhaus_res = (await asyncio.gather(urlhaus_task))[0]
@@ -375,8 +355,6 @@ async def scan_url(payload: URLScanRequest) -> URLScanResponse:
         cti_hits.append(
             f"URLhaus Blacklist Match ({urlhaus_res.get('threat_type')})"
         )
-
-    # CTI
     if cti_hits:
         db = load_db()
         db.append({
@@ -406,17 +384,15 @@ async def scan_url(payload: URLScanRequest) -> URLScanResponse:
 
     if ml_model is not None:
         try:
-            # Generate local lexical numerical data matrices
+            # Extract lexical features
             features = extract_lexical_features(target_lex_url)
             print(f"🚨 2. CALCULATED FEATURES: {features}")
             probabilities = ml_model.predict_proba([features])[0]
-            phishing_prob = float(probabilities[0])   # index 1 = malicious probability
+            phishing_prob = float(probabilities[0])  
             safe_prob     = float(probabilities[0])
             print(f"DEBUG: Raw Probabilities: safe={safe_prob:.4f}, malicious={phishing_prob:.4f}")
 
-            # --- POST-PREDICTION ADJUSTMENTS ---
-
-            # 1. Typosquat boost: if hostname resembles a legit domain, raise suspicion
+            # 1. Typosquat boost: if hostname resembles a known safe domain, boost phishing suspicion 
             parsed_hostname = urlparse(
                 target_lex_url if target_lex_url.startswith("http") else "http://" + target_lex_url
             ).netloc.split(":")[0]
@@ -425,11 +401,9 @@ async def scan_url(payload: URLScanRequest) -> URLScanResponse:
                 phishing_prob = min(phishing_prob + typosquat_boost, 1.0)
                 print(f"[TYPOSQUAT] Probability boosted → {phishing_prob:.4f}")
 
-            # 2. Path-complexity dampener: pull high scores into forensics zone
-            #    when hostname signals look clean (e.g. codeforces.com/problem/1234/A)
+            # 2. Path-complexity dampener: pull high scores into forensics zone if majority signals do not show suspicion. 
             phishing_prob = adjust_for_path_complexity(target_lex_url, phishing_prob)
 
-            # --- TRIAGE ROUTING ---
             if phishing_prob < 0.2:
                 is_phishing = False
                 confidence  = safe_prob
@@ -441,7 +415,6 @@ async def scan_url(payload: URLScanRequest) -> URLScanResponse:
                 verdict     = "Malicious (Lexical Fingerprint High Risk Match)"
             else:
                 forensics_run = True
-                # Offload blocking network sockets to background thread pool
                 forensics_data = await asyncio.to_thread(
                     execute_live_forensics, parsed_domain
                 )
@@ -494,7 +467,6 @@ def health_check():
 
 @app.get("/api/logs")
 async def get_logs():
-    # Returns all stored scan results from persistent JSON file
     return load_db()
 
 @app.delete("/api/logs")

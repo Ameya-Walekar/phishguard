@@ -1,4 +1,3 @@
-// src/api/backend.js
 
 const BASE_URL = 'https://phishguard-backend-yh0j.onrender.com';
 
@@ -7,7 +6,7 @@ const ignoredHosts = [
   "https://friendly-mandazi-cc5db3.netlify.app/"
 ];
 
-// Fetches historical scan logs from the FastAPI backend
+// Fetches scan logs from the backend
 export const fetchLogs = async () => {
   try {
     const response = await fetch(`${BASE_URL}/api/logs`);
@@ -28,7 +27,7 @@ export const fetchLogs = async () => {
   }
 };
 
-// Clears all scan logs from the FastAPI backend
+// Clears all scan logs from the backend
 export const clearLogs = async () => {
   const response = await fetch(`${BASE_URL}/api/logs`, {
     method: 'DELETE',

@@ -12,7 +12,6 @@ function App() {
   const [showConfirm, setShowConfirm] = useState(false);
   const exportMenuRef = useRef(null);
 
-  // Close export dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
@@ -35,7 +34,7 @@ function App() {
   }, [loadIntelligence]);
 
   const handleClearLogs = async () => {
-    await clearLogs();    // wipe backend data so it doesn't reload on refresh
+    await clearLogs();    
     setLogs([]);
     setShowConfirm(false);
   };

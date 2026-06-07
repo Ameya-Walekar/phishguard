@@ -1,4 +1,4 @@
-// Load scan history from storage and populate stats
+// Load scan history from storage 
 chrome.storage.local.get({ scanHistory: [] }, (result) => {
     const history = result.scanHistory;
     const today = new Date().toDateString();
